@@ -1,0 +1,53 @@
+# ── Python / Backend ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Database
+backend/prism.db
+backend/*.db
+
+# Uploaded & generated audio files (can be large)
+backend/uploads/
+
+# Environment secrets
+backend/.env
+
+# Demucs model cache
+.cache/
+~/.cache/torch/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+
+# Keep .env.development (contains only localhost URL — no secrets)
+
+# Bundled FFmpeg binary (downloaded at runtime by imageio-ffmpeg)
+backend/app/services/bin/
+
+# Claude Code local settings
+.claude/
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace

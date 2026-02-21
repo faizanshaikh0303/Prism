@@ -1,0 +1,35 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# Database
+sqlalchemy==2.0.36
+
+# Auth
+python-jose[cryptography]==3.3.0
+bcrypt==4.0.1
+
+# Config
+pydantic[email]==2.10.4
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+
+# File uploads
+python-multipart==0.0.12
+
+# Audio backends for torchaudio (WAV/FLAC decoding — required on Windows)
+soundfile>=0.12.1
+
+# FFmpeg binaries — converts MP3/AAC to WAV before feeding to demucs.
+# No system-wide FFmpeg install required.
+imageio-ffmpeg>=0.5.1
+
+# Stem separation (Meta Demucs — requires PyTorch)
+demucs==4.0.1
+# IMPORTANT: pin to 2.5.x — torchaudio 2.6+ requires torchcodec which is not available on Windows.
+# CPU-only install (works everywhere, no GPU needed):
+#   pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+# CUDA 12.1:
+#   pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1
+torchaudio==2.5.1
