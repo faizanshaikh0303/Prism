@@ -23,6 +23,7 @@ backend/uploads/
 
 # Environment secrets
 backend/.env
+backend/.env.production
 
 # Demucs model cache
 .cache/

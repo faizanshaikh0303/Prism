@@ -2,7 +2,24 @@
 
 Binaural spatial audio mixer with AI stem separation.
 
-Upload a song → Demucs separates it into vocal, drum, bass, guitar, piano, other tracks → drag each stem node anywhere around the listener → hear the music in 3D (best with headphones).
+Select a demo song → drag each stem node anywhere around the listener → hear the music in 3D with headphones.
+
+**Live demo:** [prism.vercel.app](https://prism.vercel.app) *(replace with your Vercel URL)*
+
+---
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18 + Vite + TypeScript, Tailwind CSS, Zustand, React Router v6 |
+| Spatial audio | Web Audio API — `PannerNode` with `panningModel: 'HRTF'` |
+| Backend | FastAPI (Python 3.11), SQLAlchemy, JWT auth |
+| Database | Neon (PostgreSQL, free tier) |
+| Stem audio files | Supabase Storage (public CDN, free 1 GB) |
+| Hosting — frontend | Vercel (free) |
+| Hosting — backend | Render (free tier, demo-only mode) |
+| Stem separation | Meta Demucs `htdemucs_6s` — run **locally**, stems pre-uploaded |
 
 ---
 
@@ -10,39 +27,39 @@ Upload a song → Demucs separates it into vocal, drum, bass, guitar, piano, oth
 
 ```
 prism/
-├── backend/               # FastAPI (Python)
+├── backend/                      # FastAPI
 │   ├── app/
-│   │   ├── main.py        # App factory, CORS, static mounts
-│   │   ├── config.py      # Pydantic settings (.env)
-│   │   ├── database.py    # SQLAlchemy + SQLite
-│   │   ├── models.py      # User, Song, Stem ORM models
-│   │   ├── schemas.py     # Pydantic I/O schemas
-│   │   ├── auth.py        # JWT + bcrypt helpers
+│   │   ├── main.py               # App factory, CORS, static mount (conditional)
+│   │   ├── config.py             # Pydantic settings (.env / env vars)
+│   │   ├── database.py           # SQLAlchemy — SQLite locally, Neon in prod
+│   │   ├── models.py             # User, Song, Stem ORM models
+│   │   ├── schemas.py            # Pydantic I/O schemas
+│   │   ├── auth.py               # JWT + bcrypt helpers
 │   │   ├── routers/
-│   │   │   ├── auth.py    # POST /register, /login  GET /me
-│   │   │   ├── songs.py   # GET /demos /my  POST /upload  DELETE /:id
-│   │   │   └── files.py   # GET /api/files/:path (audio serving)
+│   │   │   ├── auth.py           # POST /register /login  GET /me
+│   │   │   ├── songs.py          # GET /demos /my  POST /upload  DELETE /:id
+│   │   │   └── files.py          # GET /api/files/:path (local audio serving)
 │   │   └── services/
-│   │       └── stem_separator.py  # Demucs wrapper
-│   ├── seed_demos.py      # Download + stem 10 CC-BY demo songs
-│   └── requirements.txt
+│   │       └── stem_separator.py # Demucs subprocess wrapper
+│   ├── seed_demos.py             # Scan /songs folder → run Demucs → seed DB
+│   ├── upload_stems_to_supabase.py  # One-time: upload local stems → Supabase + Neon
+│   └── requirements.txt          # No torch/demucs in prod (slim Render deploy)
 │
-└── frontend/              # React 18 + Vite
-    └── src/
-        ├── pages/
-        │   ├── Landing.jsx   # Marketing / scroll page
-        │   ├── Auth.jsx      # Login / signup
-        │   └── Studio.jsx    # Main mixer — sidebar + canvas + player
-        ├── components/
-        │   ├── SpatialCanvas.jsx   # Canvas-based drag UI
-        │   └── PlayerControls.jsx  # Play, mute per-stem, volume
-        ├── hooks/
-        │   ├── useSpatialAudio.js  # Web Audio API HRTF engine
-        │   └── useAuth.js          # JWT session management
-        ├── store/
-        │   └── audioStore.js       # Zustand global state
-        ├── services/api.js         # Axios wrapper
-        └── constants.js            # Colours, canvas geometry
+├── Figma-Frontend/               # React app (Vite)
+│   └── src/app/
+│       ├── pages/Studio.jsx      # Main mixer — sidebar + canvas + player bar
+│       ├── components/
+│       │   ├── SpatialCanvas.jsx # 2D canvas drag UI
+│       │   └── PlayerControls.jsx# Seek bar, play/pause, volume
+│       ├── hooks/
+│       │   ├── useSpatialAudio.js# Web Audio API HRTF engine
+│       │   └── useAuth.js        # JWT session management
+│       ├── store/audioStore.js   # Zustand global state
+│       ├── services/api.js       # Axios wrapper + stemUrl() helper
+│       └── constants.js          # STEM_COLORS, canvas geometry
+│
+├── render.yaml                   # Render deployment config
+└── songs/                        # (gitignored) local audio files for seeding
 ```
 
 ### How spatial audio works
@@ -50,19 +67,19 @@ prism/
 ```
 AudioBufferSourceNode
        │
-   GainNode  (individual mute / volume per stem)
+   GainNode   (per-stem mute)
        │
    PannerNode  (panningModel: HRTF, distanceModel: inverse)
        │
   MasterGain
        │
-AudioContext.destination (→ headphones)
+AudioContext.destination → headphones
 ```
 
-Canvas position `(x, y)` → 3-D audio space:
+Canvas `(x, y)` → 3-D audio coordinates:
 ```
 audioX =  canvasX / CANVAS_RADIUS * MAX_DIST
-audioZ = -canvasY / CANVAS_RADIUS * MAX_DIST   ← canvas down = audio back
+audioZ = -canvasY / CANVAS_RADIUS * MAX_DIST   ← canvas up = audio forward
 audioY = 0                                       ← horizontal plane only
 ```
 
@@ -71,7 +88,7 @@ Angle around centre → HRTF panning → perceived direction.
 
 ---
 
-## Setup
+## Local development
 
 ### Prerequisites
 
@@ -81,43 +98,38 @@ Angle around centre → HRTF panning → perceived direction.
 | Node.js | 20+ |
 | pip | latest |
 
-Demucs requires **PyTorch**. Install CPU-only version first (easiest):
+Demucs requires **PyTorch** (local only — not needed on Render):
 ```bash
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 ```
-For CUDA (much faster), see https://pytorch.org/get-started/locally/
 
 ---
 
-### 1 — Backend
+### 1 — Backend (local)
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
 
-# Install dependencies
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
-# Configure environment
 cp .env.example .env
-# Edit .env — set a strong SECRET_KEY
+# Edit .env — set SECRET_KEY and any other values
 
-# Start server
 uvicorn app.main:app --reload --port 8000
 ```
 
-The API is now live at http://localhost:8000
-Interactive docs: http://localhost:8000/docs
+API: http://localhost:8000
+Docs: http://localhost:8000/docs
 
 ---
 
-### 2 — Frontend
+### 2 — Frontend (local)
 
 ```bash
-cd frontend
+cd Figma-Frontend
 npm install
 npm run dev
 ```
@@ -126,21 +138,57 @@ Open http://localhost:5173
 
 ---
 
-### 3 — Seed demo songs (optional but recommended)
+### 3 — Seed demo songs
 
-Run this **once** after the backend is started. It downloads 10 CC-BY tracks from Kevin MacLeod, runs Demucs on each (~5 min per song on CPU), and registers them as demo songs.
+Place audio files in a `songs/` folder at the repo root (any format: mp3, wav, flac…).
+Filenames should follow `Artist - Title.mp3` for best parsing.
 
 ```bash
 cd backend
-source .venv/bin/activate
-python seed_demos.py
+source .venv/Scripts/activate
+python seed_demos.py              # scans ../songs/, runs Demucs, seeds local DB
+python seed_demos.py --reset      # clear existing demos first
+python seed_demos.py --songs-dir /path/to/folder
 ```
-
-Songs are stored in `backend/uploads/` and registered in `prism.db`.
 
 ---
 
-## API Reference
+## Deployment (free tier)
+
+The production setup uses **demo-only mode** — stems are pre-generated locally and served from Supabase Storage CDN. Render's free tier (512 MB RAM) cannot run Demucs (needs 2–4 GB).
+
+### One-time setup
+
+1. **Supabase** — create project → Storage → bucket `prism-stems` (public)
+2. **Neon** — create project `prism`, copy connection string
+3. Seed Neon + upload stems to Supabase:
+   ```bash
+   cd backend
+   pip install supabase psycopg2-binary
+   # Set SUPABASE_URL, SUPABASE_SERVICE_KEY, DATABASE_URL in .env.production
+   python upload_stems_to_supabase.py
+   ```
+
+### Render (backend)
+
+- Connect GitHub repo → New Web Service
+- Root directory: `backend` (or `render.yaml` handles this)
+- Set env vars in Render dashboard:
+  - `DATABASE_URL` — Neon connection string
+  - `SECRET_KEY` — random hex: `python -c "import secrets; print(secrets.token_hex(32))"`
+  - `CORS_ORIGINS` — `["https://your-app.vercel.app"]`
+- `DEMO_MODE`, `PYTHON_VERSION`, `UPLOAD_DIR` are already set in `render.yaml`
+
+### Vercel (frontend)
+
+- Import GitHub repo → Root Directory: `Figma-Frontend`
+- Add env var: `VITE_API_URL=https://prism-api.onrender.com`
+- Add env var: `VITE_DEMO_MODE=true`
+- Deploy
+
+---
+
+## API reference
 
 ### Auth
 | Method | Path | Body | Description |
@@ -152,40 +200,32 @@ Songs are stored in `backend/uploads/` and registered in `prism.db`.
 ### Songs
 | Method | Path | Description |
 |--------|------|-------------|
-| GET  | `/api/songs/demos`      | List complete demo songs |
-| GET  | `/api/songs/my`         | List current user's songs |
-| POST | `/api/songs/upload`     | Upload + queue stem separation |
-| GET  | `/api/songs/{id}`       | Poll song status & stems |
-| DELETE | `/api/songs/{id}`     | Delete song + files |
+| GET    | `/api/songs/demos`  | List complete demo songs + stems |
+| GET    | `/api/songs/my`     | List current user's songs |
+| POST   | `/api/songs/upload` | Upload + queue stem separation (disabled in demo mode) |
+| GET    | `/api/songs/{id}`   | Poll song status & stems |
+| DELETE | `/api/songs/{id}`   | Delete song + files |
+| GET    | `/health`           | Health check (wakes Render from sleep) |
 
 Stem processing is async. Poll `GET /api/songs/{id}` until `status === "complete"`.
 
 ---
 
-## Limits (free, zero-cost)
+## Environment variables
 
-| Limit | Value |
-|-------|-------|
-| Songs per account | 3 |
-| Demo songs | 10 (pre-seeded) |
-| Storage | Local disk |
-| Processing | CPU Demucs (~5 min/song) |
-
-All infrastructure runs on your own machine — no paid services required.
-
----
-
-## Replacing the frontend
-
-The UI is intentionally minimal. When your Figma / Spline design is ready:
-
-1. Replace `Landing.jsx`, `Auth.jsx`, `Studio.jsx` with your new components.
-2. Keep the hooks (`useSpatialAudio`, `useAuth`) and store (`audioStore`) — they are UI-agnostic.
-3. `SpatialCanvas.jsx` can be replaced with a WebGL/Three.js canvas; just call `onPositionChange(stemId, x, y)` when nodes move.
+| Variable | Where set | Description |
+|----------|-----------|-------------|
+| `SECRET_KEY` | Render dashboard | JWT signing key |
+| `DATABASE_URL` | Render dashboard | Neon PostgreSQL connection string |
+| `CORS_ORIGINS` | Render dashboard | `["https://your-app.vercel.app"]` |
+| `DEMO_MODE` | render.yaml | `"true"` — disables user uploads |
+| `PYTHON_VERSION` | render.yaml | `"3.11.10"` — prevents Render defaulting to 3.14 |
+| `VITE_API_URL` | Vercel dashboard | Render backend URL |
+| `VITE_DEMO_MODE` | Vercel dashboard | `"true"` — disables upload button in UI |
 
 ---
 
-## Demo song attribution
+## Attribution
 
-All demo songs by **Kevin MacLeod** (incompetech.com).
-Licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+Demo songs by artists from the `songs/` folder (user-supplied).
+Stem separation powered by [Meta Demucs](https://github.com/facebookresearch/demucs).

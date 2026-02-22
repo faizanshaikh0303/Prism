@@ -1,17 +1,17 @@
 /** Colour assigned to each stem type for the spatial canvas and UI. */
 export const STEM_COLORS = {
-  vocals:  '#FF6B6B',
-  drums:   '#4ECDC4',
-  bass:    '#45B7D1',
-  guitar:  '#96CEB4',
-  piano:   '#FFEAA7',
-  other:   '#C9A0DC',
+  vocals:  '#f472b6',
+  drums:   '#60a5fa',
+  bass:    '#34d399',
+  guitar:  '#a78bfa',
+  piano:   '#fbbf24',
+  other:   '#fb923c',
 };
 
 /** Canvas geometry constants (pixels). */
-export const CANVAS_SIZE   = 500;
+export const CANVAS_SIZE   = 580;
 export const CANVAS_CENTER = CANVAS_SIZE / 2;
-export const CANVAS_RADIUS = 200;
+export const CANVAS_RADIUS = 235;
 export const NODE_RADIUS   = 22;
 
 /** Spatial audio distance constants (Web Audio API units). */

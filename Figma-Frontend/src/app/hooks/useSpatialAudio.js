@@ -165,6 +165,32 @@ export default function useSpatialAudio() {
     stopSources();
   }, [stopSources]);
 
+  const getDuration = useCallback(() => {
+    const buf = Object.values(buffersRef.current)[0];
+    return buf?.duration ?? 0;
+  }, []);
+
+  const getCurrentTime = useCallback(() => {
+    const duration = getDuration();
+    if (!duration) return 0;
+    const ctx = ctxRef.current;
+    if (playingRef.current && ctx) {
+      const elapsed = ctx.currentTime - startAtRef.current;
+      return (offsetRef.current + elapsed) % duration;
+    }
+    return offsetRef.current % duration;
+  }, [getDuration]);
+
+  const seek = useCallback((newTime) => {
+    const wasPlaying = playingRef.current;
+    if (wasPlaying) {
+      playingRef.current = false;
+      stopSources();
+    }
+    offsetRef.current = newTime;
+    return wasPlaying;
+  }, [stopSources]);
+
   useEffect(() => {
     return () => {
       stopSources();
@@ -172,5 +198,5 @@ export default function useSpatialAudio() {
     };
   }, [stopSources]);
 
-  return { loadStems, play, pause, updatePosition, setMute, setMasterVolume, resetOffset };
+  return { loadStems, play, pause, updatePosition, setMute, setMasterVolume, resetOffset, getCurrentTime, getDuration, seek };
 }
