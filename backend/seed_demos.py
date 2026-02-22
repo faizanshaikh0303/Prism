@@ -1,20 +1,21 @@
 """
-Demo song seeder.
+Demo song seeder — scans the /songs folder and seeds the database.
 
-Downloads 10 CC-licensed tracks from Kevin MacLeod (Incompetech, CC BY 3.0),
-runs Demucs stem separation on each, and registers them in the database as
-is_demo=True songs.
+Instead of downloading tracks, it reads every audio file from a local
+songs/ directory (default: <repo_root>/songs/), parses Artist / Title
+from the filename, and runs Demucs stem separation.
 
 Usage:
     cd backend
-    python seed_demos.py
-
-Attribution: All songs by Kevin MacLeod (incompetech.com)
-Licensed under Creative Commons: By Attribution 4.0 License
-https://creativecommons.org/licenses/by/4.0/
+    python seed_demos.py              # scan ../songs/
+    python seed_demos.py --reset      # clear existing demo entries first
+    python seed_demos.py --songs-dir /path/to/folder
+    python seed_demos.py --reset --songs-dir /path/to/folder
 """
+import re
+import shutil
 import sys
-import urllib.request
+import argparse
 from pathlib import Path
 
 # Add project root so we can import app modules
@@ -25,104 +26,120 @@ from app.database import Base, engine, SessionLocal
 from app.models import Song, Stem
 from app.services.stem_separator import separate_stems
 
-# ── Demo track catalogue ───────────────────────────────────────────────────────
-# Direct MP3 links from the Free Music Archive / Incompetech.
-# These are all CC BY 4.0 — free for any use with attribution.
-DEMO_TRACKS = [
-    {
-        "title": "Sneaky Snitch",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Sneaky%20Snitch.mp3",
-    },
-    {
-        "title": "Monkeys Spinning Monkeys",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Monkeys%20Spinning%20Monkeys.mp3",
-    },
-    {
-        "title": "Investigations",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Investigations.mp3",
-    },
-    {
-        "title": "Pixelland",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pixelland.mp3",
-    },
-    {
-        "title": "Five Armies",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Five%20Armies.mp3",
-    },
-    {
-        "title": "Dewdrop Fantasy",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Dewdrop%20Fantasy.mp3",
-    },
-    {
-        "title": "Local Forecast",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Local%20Forecast.mp3",
-    },
-    {
-        "title": "Scheming Weasel",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Scheming%20Weasel%20slower.mp3",
-    },
-    {
-        "title": "Achaidh Cheide",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Achaidh%20Cheide.mp3",
-    },
-    {
-        "title": "Volatile Reaction",
-        "artist": "Kevin MacLeod",
-        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3",
-    },
-]
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac"}
+
+# Default songs folder: one level above backend/
+DEFAULT_SONGS_DIR = Path(__file__).parent.parent / "songs"
+
+
+def parse_filename(stem: str) -> tuple[str, str]:
+    """
+    Parse 'Artist - Title (Optional Noise)' from a filename stem.
+
+    Examples:
+      'Bruno Mars - The Lazy Song (Official Music Video) - (128 Kbps)'
+        → ('Bruno Mars', 'The Lazy Song')
+      'Coldplay - Paradise (Official Video)'
+        → ('Coldplay', 'Paradise')
+      'Imagine Dragons - Bad Liar'
+        → ('Imagine Dragons', 'Bad Liar')
+    """
+    s = stem
+
+    # Strip trailing " - (anything)" e.g. " - (128 Kbps)"
+    s = re.sub(r'\s*-\s*\([^)]*\)\s*$', '', s).strip()
+
+    # Strip trailing parentheticals with known noise words
+    s = re.sub(
+        r'\s*\([^)]*(?:official|video|audio|hd|music|lyrics|mv|kbps|visualizer|remaster)[^)]*\)\s*$',
+        '', s, flags=re.IGNORECASE,
+    ).strip()
+    # Also strip square-bracket variants
+    s = re.sub(
+        r'\s*\[[^\]]*(?:official|video|audio|hd|music|lyrics|mv)[^\]]*\]\s*$',
+        '', s, flags=re.IGNORECASE,
+    ).strip()
+
+    if ' - ' in s:
+        artist, title = s.split(' - ', 1)
+        return artist.strip(), title.strip()
+
+    return 'Unknown', s.strip()
+
+
+def clear_demo_songs(db) -> None:
+    """Delete all is_demo=True songs (and their stems via cascade)."""
+    deleted = db.query(Song).filter(Song.is_demo == True).delete()
+    db.commit()
+    print(f"  Cleared {deleted} existing demo song(s) from database.")
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed demo songs from a local folder.")
+    parser.add_argument(
+        "--songs-dir",
+        type=Path,
+        default=DEFAULT_SONGS_DIR,
+        help=f"Folder containing audio files (default: {DEFAULT_SONGS_DIR})",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Clear existing demo entries before seeding",
+    )
+    args = parser.parse_args()
+
+    songs_dir: Path = args.songs_dir.resolve()
+
+    if not songs_dir.exists():
+        sys.exit(f"Songs folder not found: {songs_dir}")
+
+    audio_files = sorted(
+        f for f in songs_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+    )
+
+    if not audio_files:
+        sys.exit(f"No audio files found in {songs_dir}")
+
+    print(f"Found {len(audio_files)} audio file(s) in {songs_dir}\n")
+
     Base.metadata.create_all(bind=engine)
 
-    raw_dir = Path(settings.UPLOAD_DIR) / "demo_originals"
+    raw_dir   = Path(settings.UPLOAD_DIR) / "demo_originals"
     stems_dir = Path(settings.UPLOAD_DIR) / "stems"
     raw_dir.mkdir(parents=True, exist_ok=True)
     stems_dir.mkdir(parents=True, exist_ok=True)
 
     db = SessionLocal()
 
-    for track in DEMO_TRACKS:
-        title = track["title"]
-        artist = track["artist"]
+    if args.reset:
+        clear_demo_songs(db)
+        print()
 
-        # Skip if already seeded
+    for audio_file in audio_files:
+        artist, title = parse_filename(audio_file.stem)
+        print(f"→ {artist} — {title}  [{audio_file.name}]")
+
+        # Skip if already seeded (by title match)
         existing = db.query(Song).filter(Song.title == title, Song.is_demo == True).first()
         if existing:
-            print(f"  [skip] {title} — already in database")
+            print(f"  [skip] already in database\n")
             continue
 
-        print(f"\n→ Processing: {title}")
-
-        # Download
-        safe_name = title.replace(" ", "_").replace("/", "-")
-        mp3_path = raw_dir / f"{safe_name}.mp3"
-
-        if not mp3_path.exists():
-            print(f"  Downloading from {track['url']} …")
-            try:
-                urllib.request.urlretrieve(track["url"], mp3_path)
-            except Exception as e:
-                print(f"  [error] Download failed: {e}")
-                continue
+        # Copy original into uploads/demo_originals/
+        dest_path = raw_dir / audio_file.name
+        if not dest_path.exists():
+            shutil.copy2(audio_file, dest_path)
+            print(f"  Copied → {dest_path.name}")
         else:
-            print(f"  [cached] {mp3_path.name}")
+            print(f"  [cached] {dest_path.name}")
 
         # Create DB record
         song = Song(
             title=title,
             artist=artist,
-            original_path=str(mp3_path),
+            original_path=str(dest_path),
             status="processing",
             is_demo=True,
         )
@@ -133,20 +150,20 @@ def main() -> None:
         # Run Demucs
         print(f"  Separating stems (this takes a few minutes) …")
         try:
-            stem_paths = separate_stems(str(mp3_path), str(stems_dir), song.id)
+            stem_paths = separate_stems(str(dest_path), str(stems_dir), song.id)
             for stem_type, path in stem_paths.items():
                 db.add(Stem(song_id=song.id, stem_type=stem_type, file_path=str(path)))
             song.status = "complete"
             db.commit()
-            print(f"  ✓ Done — {len(stem_paths)} stems: {', '.join(stem_paths.keys())}")
+            print(f"  ✓ {len(stem_paths)} stems: {', '.join(stem_paths.keys())}\n")
         except Exception as e:
             song.status = "error"
             song.error_message = str(e)[:500]
             db.commit()
-            print(f"  [error] Demucs failed: {e}")
+            print(f"  [error] Demucs failed: {e}\n")
 
     db.close()
-    print("\nSeeding complete.")
+    print("Seeding complete.")
 
 
 if __name__ == "__main__":

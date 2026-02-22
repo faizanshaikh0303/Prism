@@ -47,6 +47,9 @@ backend/app/services/bin/
 # Claude Code local settings
 .claude/
 
+# Local songs folder (user-supplied audio — not committed)
+songs/
+
 # ── OS / Editor ───────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
