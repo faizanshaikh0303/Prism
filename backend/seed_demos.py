@@ -38,11 +38,11 @@ def parse_filename(stem: str) -> tuple[str, str]:
 
     Examples:
       'Bruno Mars - The Lazy Song (Official Music Video) - (128 Kbps)'
-        → ('Bruno Mars', 'The Lazy Song')
+        >> ('Bruno Mars', 'The Lazy Song')
       'Coldplay - Paradise (Official Video)'
-        → ('Coldplay', 'Paradise')
+        >> ('Coldplay', 'Paradise')
       'Imagine Dragons - Bad Liar'
-        → ('Imagine Dragons', 'Bad Liar')
+        >> ('Imagine Dragons', 'Bad Liar')
     """
     s = stem
 
@@ -119,7 +119,7 @@ def main() -> None:
 
     for audio_file in audio_files:
         artist, title = parse_filename(audio_file.stem)
-        print(f"→ {artist} — {title}  [{audio_file.name}]")
+        print(f">> {artist} - {title}  [{audio_file.name}]")
 
         # Skip if already seeded (by title match)
         existing = db.query(Song).filter(Song.title == title, Song.is_demo == True).first()
@@ -131,7 +131,7 @@ def main() -> None:
         dest_path = raw_dir / audio_file.name
         if not dest_path.exists():
             shutil.copy2(audio_file, dest_path)
-            print(f"  Copied → {dest_path.name}")
+            print(f"  Copied >> {dest_path.name}")
         else:
             print(f"  [cached] {dest_path.name}")
 
@@ -148,14 +148,14 @@ def main() -> None:
         db.refresh(song)
 
         # Run Demucs
-        print(f"  Separating stems (this takes a few minutes) …")
+        print(f"  Separating stems (this takes a few minutes) ...")
         try:
             stem_paths = separate_stems(str(dest_path), str(stems_dir), song.id)
             for stem_type, path in stem_paths.items():
                 db.add(Stem(song_id=song.id, stem_type=stem_type, file_path=str(path)))
             song.status = "complete"
             db.commit()
-            print(f"  ✓ {len(stem_paths)} stems: {', '.join(stem_paths.keys())}\n")
+            print(f"  [ok] {len(stem_paths)} stems: {', '.join(stem_paths.keys())}\n")
         except Exception as e:
             song.status = "error"
             song.error_message = str(e)[:500]
