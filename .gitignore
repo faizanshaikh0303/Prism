@@ -34,6 +34,11 @@ frontend/dist/
 frontend/.env.local
 frontend/.env.production
 
+Figma-Frontend/node_modules/
+Figma-Frontend/dist/
+Figma-Frontend/.env.local
+Figma-Frontend/.env.production
+
 # Keep .env.development (contains only localhost URL — no secrets)
 
 # Bundled FFmpeg binary (downloaded at runtime by imageio-ffmpeg)

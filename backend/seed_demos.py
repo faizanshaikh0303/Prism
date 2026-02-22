@@ -54,31 +54,31 @@ DEMO_TRACKS = [
         "artist": "Kevin MacLeod",
         "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Five%20Armies.mp3",
     },
-    # {
-    #     "title": "Dewdrop Fantasy",
-    #     "artist": "Kevin MacLeod",
-    #     "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Dewdrop%20Fantasy.mp3",
-    # },
-    # {
-    #     "title": "Local Forecast",
-    #     "artist": "Kevin MacLeod",
-    #     "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Local%20Forecast.mp3",
-    # },
-    # {
-    #     "title": "Scheming Weasel",
-    #     "artist": "Kevin MacLeod",
-    #     "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Scheming%20Weasel%20slower.mp3",
-    # },
-    # {
-    #     "title": "Achaidh Cheide",
-    #     "artist": "Kevin MacLeod",
-    #     "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Achaidh%20Cheide.mp3",
-    # },
-    # {
-    #     "title": "Volatile Reaction",
-    #     "artist": "Kevin MacLeod",
-    #     "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3",
-    # },
+    {
+        "title": "Dewdrop Fantasy",
+        "artist": "Kevin MacLeod",
+        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Dewdrop%20Fantasy.mp3",
+    },
+    {
+        "title": "Local Forecast",
+        "artist": "Kevin MacLeod",
+        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Local%20Forecast.mp3",
+    },
+    {
+        "title": "Scheming Weasel",
+        "artist": "Kevin MacLeod",
+        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Scheming%20Weasel%20slower.mp3",
+    },
+    {
+        "title": "Achaidh Cheide",
+        "artist": "Kevin MacLeod",
+        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Achaidh%20Cheide.mp3",
+    },
+    {
+        "title": "Volatile Reaction",
+        "artist": "Kevin MacLeod",
+        "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3",
+    },
 ]
 
 
