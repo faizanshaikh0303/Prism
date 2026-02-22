@@ -78,9 +78,25 @@ def public_url(path_in_bucket: str) -> str:
     return f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{path_in_bucket}"
 
 
+def supabase_file_exists(remote_path: str) -> bool:
+    """Return True if the file already exists in Supabase Storage."""
+    folder, filename = remote_path.rsplit("/", 1)
+    try:
+        files = supabase.storage.from_(BUCKET).list(folder)
+        return any(f["name"] == filename for f in (files or []))
+    except Exception:
+        return False
+
+
 def upload_stem(local_path: Path, song_id: int, stem_type: str) -> str:
-    """Upload one stem file, return its public URL."""
+    """Upload one stem file (skips if already present), return its public URL."""
     remote_path = f"{song_id}/{stem_type}{local_path.suffix}"
+    url = public_url(remote_path)
+
+    if supabase_file_exists(remote_path):
+        print(f"  [cached] {local_path.name}")
+        return url
+
     with local_path.open("rb") as f:
         data = f.read()
     try:
@@ -88,10 +104,9 @@ def upload_stem(local_path: Path, song_id: int, stem_type: str) -> str:
             remote_path, data,
             file_options={"content-type": "audio/wav", "upsert": "true"},
         )
+        print(f"  [upload] {local_path.name}")
     except Exception as e:
-        print(f"  Warning uploading {remote_path}: {e}")
-    url = public_url(remote_path)
-    print(f"  ↑ {local_path.name} → {url}")
+        print(f"  [warn] {remote_path}: {e}")
     return url
 
 
@@ -132,15 +147,34 @@ def seed_neon(songs_data: list[dict]):
             conn.commit()
 
         for song in songs_data:
-            # Check if already inserted
+            # Check if song already exists in Neon
             existing = neon.execute(
                 sa.text("SELECT id FROM songs WHERE title = :title AND is_demo = TRUE"),
                 {"title": song["title"]},
             ).fetchone()
+
             if existing:
-                print(f"  skip (exists): {song['title']}")
+                neon_song_id = existing[0]
+                stem_count = neon.execute(
+                    sa.text("SELECT COUNT(*) FROM stems WHERE song_id = :sid"),
+                    {"sid": neon_song_id},
+                ).fetchone()[0]
+
+                if stem_count > 0:
+                    print(f"  [skip] {song['title']} (already in Neon with {stem_count} stems)")
+                    continue
+
+                # Song row exists but stems are missing — insert them now
+                for stem_type, url in song["stems"].items():
+                    neon.execute(
+                        sa.text("INSERT INTO stems (song_id, stem_type, file_path) VALUES (:sid, :st, :fp)"),
+                        {"sid": neon_song_id, "st": stem_type, "fp": url},
+                    )
+                neon.commit()
+                print(f"  [fixed] Added {len(song['stems'])} stems to existing song '{song['title']}' (id={neon_song_id})")
                 continue
 
+            # Brand new song — insert song row + stems
             row = neon.execute(
                 sa.text("""
                     INSERT INTO songs (title, artist, status, is_demo)
@@ -158,7 +192,7 @@ def seed_neon(songs_data: list[dict]):
                 )
 
             neon.commit()
-            print(f"  ✓ seeded: {song['title']} (id={new_id})")
+            print(f"  [new]  {song['title']} (id={new_id}, {len(song['stems'])} stems)")
 
 
 def main():

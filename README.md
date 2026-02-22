@@ -4,7 +4,7 @@ Binaural spatial audio mixer with AI stem separation.
 
 Select a demo song → drag each stem node anywhere around the listener → hear the music in 3D with headphones.
 
-**Live demo:** [prism.vercel.app](https://prism.vercel.app) *(replace with your Vercel URL)*
+**Live demo:** [prism-sound.vercel.app](https://prism-sound.vercel.app)
 
 ---
 
