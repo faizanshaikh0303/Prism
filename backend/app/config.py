@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     DEMO_STEMS_DIR: str = "./demo_stems"
 
     MAX_USER_SONGS: int = 3
+    DEMO_MODE: bool = False  # Set to true on Render to disable user uploads
 
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",

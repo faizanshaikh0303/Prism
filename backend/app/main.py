@@ -29,12 +29,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve uploaded audio files as static assets (supports Range requests via browser)
-app.mount(
-    "/uploads",
-    StaticFiles(directory=settings.UPLOAD_DIR),
-    name="uploads",
-)
+# Serve uploaded audio files as static assets — only if the directory exists.
+# On Render (demo mode) stems are served from Supabase CDN, so this is skipped.
+_upload_path = Path(settings.UPLOAD_DIR)
+if _upload_path.exists():
+    app.mount(
+        "/uploads",
+        StaticFiles(directory=str(_upload_path)),
+        name="uploads",
+    )
 
 app.include_router(auth.router)
 app.include_router(songs.router)

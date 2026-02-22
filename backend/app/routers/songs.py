@@ -93,6 +93,12 @@ async def upload_song(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if settings.DEMO_MODE:
+        raise HTTPException(
+            status_code=503,
+            detail="Song upload is disabled in demo mode. Run the app locally to upload your own tracks.",
+        )
+
     # Enforce upload limit
     song_count = db.query(Song).filter(Song.user_id == current_user.id).count()
     if song_count >= settings.MAX_USER_SONGS:

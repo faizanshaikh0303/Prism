@@ -36,11 +36,13 @@ export const songsApi = {
 };
 
 /**
- * Convert an absolute server-side file_path to a URL the browser can fetch.
- * The backend mounts /uploads as a static directory.
+ * Convert a stem file_path to a URL the browser can fetch.
+ * - If file_path is already an absolute URL (Supabase CDN in production), return it directly.
+ * - Otherwise convert a local server path to a /uploads/... URL (local dev).
  */
 export function stemUrl(filePath) {
   if (!filePath) return '';
+  if (filePath.startsWith('http')) return filePath;
   const norm = filePath.replace(/\\/g, '/');
   const idx  = norm.indexOf('/uploads/');
   if (idx !== -1) return `${BASE_URL}${norm.slice(idx)}`;
