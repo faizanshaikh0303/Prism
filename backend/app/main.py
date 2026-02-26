@@ -4,9 +4,10 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from .config import settings
-from .database import Base, engine
+from .database import Base, engine, SessionLocal
 from .routers import auth, songs, files
 
 
@@ -46,4 +47,10 @@ app.include_router(files.router)
 
 @app.get("/health")
 def health():
+    # Touch the DB so Neon wakes up alongside the Render instance
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except Exception:
+        pass
     return {"status": "ok"}
