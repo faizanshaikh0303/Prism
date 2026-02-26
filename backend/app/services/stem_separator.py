@@ -58,7 +58,8 @@ def _to_wav(input_path: Path, tmp_dir: Path) -> Path:
             str(wav_path),
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg conversion failed:\n{result.stderr}")

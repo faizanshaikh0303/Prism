@@ -16,8 +16,11 @@ Usage:
   Then run:
     python backend/upload_stems_to_supabase.py
 """
+import io
 import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # ── Load env ──────────────────────────────────────────────────────────────────
@@ -64,6 +67,31 @@ NeonSession = sessionmaker(bind=neon_engine)
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
+def _get_ffmpeg_exe() -> str | None:
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def _to_mp3_bytes(wav_path: Path) -> bytes:
+    """Transcode a WAV file to MP3 bytes (192 kbps) using imageio-ffmpeg."""
+    ffmpeg = _get_ffmpeg_exe()
+    if not ffmpeg:
+        raise RuntimeError("imageio-ffmpeg not available; cannot transcode to MP3")
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        subprocess.run(
+            [ffmpeg, "-y", "-i", str(wav_path), "-q:a", "2", "-f", "mp3", tmp_path],
+            capture_output=True, check=True,
+        )
+        return Path(tmp_path).read_bytes()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
 def ensure_bucket():
     """Create the bucket if it doesn't exist (idempotent)."""
     buckets = [b.name for b in supabase.storage.list_buckets()]
@@ -89,24 +117,36 @@ def supabase_file_exists(remote_path: str) -> bool:
 
 
 def upload_stem(local_path: Path, song_id: int, stem_type: str) -> str:
-    """Upload one stem file (skips if already present), return its public URL."""
-    remote_path = f"{song_id}/{stem_type}{local_path.suffix}"
+    """Upload one stem file (skips if already present), return its public URL.
+
+    WAV files are transcoded to MP3 before upload to stay under Supabase's
+    50 MB per-file limit.
+    """
+    # Always store as MP3 in Supabase regardless of local format
+    remote_path = f"{song_id}/{stem_type}.mp3"
     url = public_url(remote_path)
 
     if supabase_file_exists(remote_path):
-        print(f"  [cached] {local_path.name}")
+        print(f"  [cached] {remote_path}")
         return url
 
-    with local_path.open("rb") as f:
-        data = f.read()
+    # Transcode WAV → MP3; upload other formats as-is
+    if local_path.suffix.lower() == ".wav":
+        print(f"  [transcode] {local_path.name} -> mp3...", end=" ", flush=True)
+        data = _to_mp3_bytes(local_path)
+        content_type = "audio/mpeg"
+    else:
+        data = local_path.read_bytes()
+        content_type = "audio/mpeg" if local_path.suffix.lower() == ".mp3" else "audio/wav"
+
     try:
         supabase.storage.from_(BUCKET).upload(
             remote_path, data,
-            file_options={"content-type": "audio/wav", "upsert": "true"},
+            file_options={"content-type": content_type, "upsert": "true"},
         )
-        print(f"  [upload] {local_path.name}")
+        print(f"[upload] {remote_path} ({len(data) / 1_048_576:.1f} MB)")
     except Exception as e:
-        print(f"  [warn] {remote_path}: {e}")
+        print(f"\n  [warn] {remote_path}: {e}")
     return url
 
 
@@ -247,11 +287,11 @@ def main():
     print("Seeding Neon PostgreSQL...")
     seed_neon(songs_data)
 
-    print("\n✓ Done! Your Neon DB is ready and stems are on Supabase CDN.")
-    print(f"\nNext steps:")
-    print(f"  1. Set DATABASE_URL on Render to your Neon connection string")
-    print(f"  2. Set CORS_ORIGINS on Render to your Vercel domain")
-    print(f"  3. Push to GitHub → Render deploys automatically")
+    print("\n[done] Your Neon DB is ready and stems are on Supabase CDN.")
+    print("\nNext steps:")
+    print("  1. Set DATABASE_URL on Render to your Neon connection string")
+    print("  2. Set CORS_ORIGINS on Render to your Vercel domain")
+    print("  3. Push to GitHub -> Render deploys automatically")
 
 
 if __name__ == "__main__":
